@@ -16,7 +16,7 @@ https://www.youtube.com/watch?v=jQ7mQY8EFqI
 
 ## ⚙️ System Architecture
 
-The .NET MAUI client authenticates against Auth0 (OIDC + PKCE) and talks to the ASP.NET Core 10 API over two distinct channels: HTTPS REST for stats/odds/props, and a persistent SignalR WebSocket to `GameHub` at `/hubs/game` for sub-5-second live pushes[cite: 8]. SignalR is backed by a Redis backplane (channel prefix `greenslips-sr`), so broadcasts fan out correctly across container replicas[cite: 8]. Hangfire (PostgreSQL-backed storage) runs the recurring ingestion jobs that poll the BallDontLie vendor API and broadcast deltas to sport-scoped groups (`sport:nba`, `sport:mlb` — see ADR-0003)[cite: 8].
+The .NET MAUI client authenticates against Auth0 (OIDC + PKCE) and talks to the ASP.NET Core 10 API over two distinct channels: HTTPS REST for stats/odds/props, and a persistent SignalR WebSocket to `GameHub` at `/hubs/game` for sub-5-second live pushes. SignalR is backed by a Redis backplane (channel prefix `greenslips-sr`), so broadcasts fan out correctly across container replicas. Hangfire (PostgreSQL-backed storage) runs the recurring ingestion jobs that poll the BallDontLie vendor API and broadcast deltas to sport-scoped groups (`sport:nba`, `sport:mlb` — see ADR-0003).
 
 ```mermaid
 flowchart TB
@@ -74,7 +74,7 @@ flowchart TB
 
 ## 🧠 AI & Machine Learning Pipeline
 
-The Python pipeline (`src/SportsModel`) is a six-stage offline pipeline[cite: 8]. Player-tracking profiles are compressed by a PyTorch autoencoder into an 8-dimensional continuous "role space" (replacing discrete K-Means archetypes); those embeddings join Kalman-filtered form features and RAPM priors as inputs to per-prop XGBoost models (points, assists, rebounds, blocks, steals, threes) plus three game-line models (moneyline, spread, total)[cite: 8]. Raw classifier outputs are calibrated with scikit-learn Isotonic Regression before Kelly-criterion bet sizing[cite: 8].
+The Python pipeline (`src/SportsModel`) is a six-stage offline pipeline. Player-tracking profiles are compressed by a PyTorch autoencoder into an 8-dimensional continuous "role space" (replacing discrete K-Means archetypes); those embeddings join Kalman-filtered form features and RAPM priors as inputs to per-prop XGBoost models (points, assists, rebounds, blocks, steals, threes) plus three game-line models (moneyline, spread, total). Raw classifier outputs are calibrated with scikit-learn Isotonic Regression before Kelly-criterion bet sizing.
 
 ```mermaid
 flowchart LR
@@ -146,7 +146,7 @@ flowchart LR
 
 ## 🗄️ Database Design Principles
 
-The schema is intentionally **denormalized for read-heavy slate queries**: there are no enforced foreign-key constraints or EF navigation properties[cite: 8]. Tables are correlated through shared `PlayerId` / `TeamId` / `GameId` keys (vendor identifiers) enforced by composite **unique indexes**, with `PlayerIdMappings` reconciling BallDontLie IDs against NBA Stats IDs[cite: 8]. Every domain table carries a `Sport` discriminator (default `Nba`) for the multi-sport rollout, and hot tables use PostgreSQL's `xmin` system column for optimistic concurrency[cite: 8].
+The schema is intentionally **denormalized for read-heavy slate queries**: there are no enforced foreign-key constraints or EF navigation properties. Tables are correlated through shared `PlayerId` / `TeamId` / `GameId` keys (vendor identifiers) enforced by composite **unique indexes**, with `PlayerIdMappings` reconciling BallDontLie IDs against NBA Stats IDs. Every domain table carries a `Sport` discriminator (default `Nba`) for the multi-sport rollout, and hot tables use PostgreSQL's `xmin` system column for optimistic concurrency.
 
 ```mermaid
 erDiagram
