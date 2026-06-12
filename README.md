@@ -7,10 +7,10 @@ GreenSlips is a commercial, multi-platform sports analytics and prediction engin
 
 ---
 
-## 🎥 Technical Walkthrough
+## 🎥 Walkthrough
 
 [](https://www.google.com/search?q=%23)
-*(Link your Loom or YouTube video here)*
+[](https://www.youtube.com/watch?v=jQ7mQY8EFqI)
 
 ---
 
