@@ -1,51 +1,22 @@
-# GreenSlips Architecture & Infrastructure 🚀
-
-Welcome to the technical documentation repository for GreenSlips. This repository outlines the system design, deployment strategies, and data pipelines powering the platform.
-
-## 📂 Repository Structure
-
-* `/docs` - System architecture diagrams (Mermaid) and API specifications.
-* `/infrastructure` - Sanitized deployment files, container orchestration (Docker), and CI/CD workflows.
-* `/ml-pipeline` - Data dictionaries, sanitized feature lists, and ML workflow overviews.
-* `/media` - Application screenshots and UI/UX flows.
-
-Here is the complete, copy-pasteable `README.md`. It integrates your architecture diagrams, your ML pipeline, and the specific note regarding the NBA-to-MLB transition. You can drop this directly into your repository.
-
----
-
-```markdown
 # GreenSlips: Predictive Sports Analytics Platform
-
-![.NET 10](https://img.shields.io/badge/.NET_10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
-![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=csharp&logoColor=white)
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/postgresql-4169e1?style=for-the-badge&logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)
-![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 
 GreenSlips is a commercial, multi-platform sports analytics and prediction engine. It aggregates real-time vendor data, processes it through custom machine learning models, and delivers low-latency betting insights to users via a cross-platform mobile and web application.
 
-> **Project Status & Roadmap Note:** 
+> **Project Status & Roadmap Note:**
 > The architecture and models documented in this repository reflect the **NBA prediction engine**. We are currently executing a multi-sport expansion to **MLB** for our V1 commercial App Store launch this August. The NBA pipeline will be retrained and reactivated ahead of the 2026-2027 season.
 
 ---
 
 ## 🎥 Technical Walkthrough
 
-[![Watch the Technical Walkthrough](https://img.shields.io/badge/▶_Watch_Loom_Walkthrough-000000?style=for-the-badge&logo=loom&logoColor=white)](#) 
+[](https://www.google.com/search?q=%23)
 *(Link your Loom or YouTube video here)*
 
 ---
 
 ## ⚙️ System Architecture
 
-Our backend is built for high-throughput data ingestion and low-latency client delivery. It utilizes a **.NET 10** REST API backed by **PostgreSQL** and **Redis**, orchestrated via **Hangfire**.
-
-*   **Real-Time Data Delivery:** **SignalR** pushes live odds, game state changes, and trending bets to subscribed .NET MAUI clients instantly.
-*   **Distributed Caching & Backplane:** **Redis** serves as our read-through cache and the pub/sub backplane for SignalR scale-out.
-*   **Background Orchestration:** **Hangfire** manages all asynchronous polling, cache invalidation, and ML inference jobs without blocking the main API threads.
-*   **Security:** Endpoints are secured via **Auth0** (OIDC + PKCE) with Role-Based Access Control (RBAC). Inbound data webhooks utilize cryptographically verified HMAC-SHA256 signatures to prevent spoofing.
+The .NET MAUI client authenticates against Auth0 (OIDC + PKCE) and talks to the ASP.NET Core 10 API over two distinct channels: HTTPS REST for stats/odds/props, and a persistent SignalR WebSocket to `GameHub` at `/hubs/game` for sub-5-second live pushes[cite: 8]. SignalR is backed by a Redis backplane (channel prefix `greenslips-sr`), so broadcasts fan out correctly across container replicas[cite: 8]. Hangfire (PostgreSQL-backed storage) runs the recurring ingestion jobs that poll the BallDontLie vendor API and broadcast deltas to sport-scoped groups (`sport:nba`, `sport:mlb` — see ADR-0003)[cite: 8].
 
 ```mermaid
 flowchart TB
@@ -73,7 +44,7 @@ flowchart TB
         REDIS[("Redis 7<br/>IDistributedCache (JsonCacheStore)<br/>SignalR backplane: greenslips-sr")]
     end
 
-    BDL["Data Vendor API<br/>odds · props · stats · injuries"]
+    BDL["BallDontLie Vendor API<br/>odds · props · stats · injuries"]
     PAY["Stripe · Apple IAP · Google IAP<br/>receipt validation + webhooks"]
 
     MAUI -->|"HTTPS REST + JWT bearer"| AFD
@@ -103,12 +74,7 @@ flowchart TB
 
 ## 🧠 AI & Machine Learning Pipeline
 
-Our predictive engine is a Python-based offline pipeline that synthesizes raw tracking, shooting, and playtype data into actionable probabilities.
-
-* **PyTorch Role-Space Embeddings:** We built a custom Autoencoder (64→32→16→8) to compress 25 advanced tracking features into an 8-dimensional continuous role space, replacing discrete clustering.
-* **Feature Engineering:** Implements advanced proprietary metrics including **PAPMY** (Positionless Archetype Plus-Minus Yield) and **DUSR v2** (Cosine-similarity-weighted stat redistribution) to accurately project outputs during key player absences.
-* **XGBoost Engine:** Gradient-boosted decision trees heavily tuned via **Optuna** (50 trials per target) and optimized using **SHAP** for automated feature pruning (stripping ≤30% low-signal features).
-* **Probability Calibration:** Applies **Isotonic Regression** (Scikit-learn) on a held-out temporal validation set to map raw classifier outputs to true probabilities before applying fractional Kelly-criterion bet sizing.
+The Python pipeline (`src/SportsModel`) is a six-stage offline pipeline[cite: 8]. Player-tracking profiles are compressed by a PyTorch autoencoder into an 8-dimensional continuous "role space" (replacing discrete K-Means archetypes); those embeddings join Kalman-filtered form features and RAPM priors as inputs to per-prop XGBoost models (points, assists, rebounds, blocks, steals, threes) plus three game-line models (moneyline, spread, total)[cite: 8]. Raw classifier outputs are calibrated with scikit-learn Isotonic Regression before Kelly-criterion bet sizing[cite: 8].
 
 ```mermaid
 flowchart LR
@@ -117,41 +83,42 @@ flowchart LR
     classDef boundary fill:#1E293B,stroke:#39FF14,color:#FFFFFF
 
     subgraph INGEST["1 · Raw Vendor Ingestion"]
-        BDL["Vendor API"]
+        BDL["BallDontLie API"]
         NETJOBS[".NET ingestion services<br/>game logs · matchup stats · props"]
-        XLSX["historical_lines.xlsx<br/>historical Vegas lines"]
-        IMP["Python Ingestion<br/>idempotent INSERT OR REPLACE"]
+        XLSX["nba_gamelines_2008-2025.xlsx<br/>historical Vegas lines"]
+        IMP["import_vegas_lines.py<br/>idempotent INSERT OR REPLACE"]
     end
 
-    DB[("PostgreSQL Data Store<br/>PlayerGameLogsBase · PlayerGameLogsAdvanced<br/>TeamMatchupLogs · MatchupStats<br/>HistoricalGameLines · PlayerPropRows")]
+    DB[("Relational store<br/>PlayerGameLogsBase · PlayerGameLogsAdvanced<br/>TeamMatchupLogs · MatchupStats<br/>HistoricalGameLines · PlayerPropRows")]
 
     subgraph FEAT["2 · Feature Engineering"]
-        LOAD["Data Loaders"]
-        FE["Feature Generation<br/>rolling windows 3/5/10/20<br/>synthetic lines ±3.0"]
-        KAL["Kalman Filters<br/>Optuna-tuned Q/R per prop"]
-        RAPM["RAPM Engine<br/>prior-season RAPM"]
-        VAC["Vacuum Engine<br/>usage redistribution"]
+        LOAD["db.py loaders"]
+        FE["features.py<br/>rolling windows 3/5/10/20<br/>synthetic lines ±3.0"]
+        KAL["kalman.py<br/>Optuna-tuned Q/R per prop"]
+        RAPM["rapm.py<br/>prior-season RAPM"]
+        VAC["vacuum.py<br/>usage redistribution"]
     end
 
     subgraph EMB["3 · PyTorch Embedding Layer"]
-        AE["RoleAutoencoder<br/>25 tracking features → 8-dim latent<br/>64→32→16→8 encoder · StandardScaler"]
-        ARCH["Archetype Extractor"]
+        AE["autoencoder.py — RoleAutoencoder<br/>25 tracking features → 8-dim latent<br/>64→32→16→8 encoder · StandardScaler"]
+        ARCH["archetypes.py<br/>load_saved_embeddings()"]
     end
 
     subgraph TRAIN["4 · XGBoost Predictive Engine"]
-        TUNE["Optuna Tuning"]
-        TR["Model Training<br/>SHAP pruning (≤30%)<br/>two-stage evaluation"]
-        MODELS["Trained Models<br/>Prop & Game-line targets"]
+        TUNE["tune.py — Optuna<br/>50 trials per target"]
+        TR["train.py<br/>SHAP pruning (≤30%)<br/>two-stage: blocks · steals<br/>temporal 80/20 split"]
+        MODELS["models/*.json<br/>6 prop models +<br/>moneyline · spread · total"]
     end
 
     subgraph CAL["5 · Scikit-Learn Calibration"]
-        ISO["IsotonicRegression<br/>Brier-score validated"]
-        PKL["Calibrator Objects"]
+        ISO["calibrate.py<br/>IsotonicRegression on hold-out<br/>Brier-score validated"]
+        PKL["models/*_calibrator.pkl"]
     end
 
     subgraph PRED["6 · Inference & Sync"]
-        INF["Prediction Engine<br/>calibrated P(over) · edge vs implied odds<br/>fractional Kelly sizing"]
+        INF["predict.py<br/>calibrated P(over) · edge vs implied odds<br/>fractional Kelly sizing (¼, cap 5%)"]
         SYNC[("PropPredictions ·<br/>GamePredictions tables")]
+        XL["Excel report<br/>(openpyxl)"]
     end
 
     BDL --> NETJOBS --> DB
@@ -168,6 +135,7 @@ flowchart LR
     PKL --> INF
     FE --> INF
     INF --> SYNC
+    INF --> XL
 
     class DB,SYNC,MODELS,PKL datastore
     class INGEST,FEAT,EMB,TRAIN,CAL,PRED boundary
@@ -178,21 +146,216 @@ flowchart LR
 
 ## 🗄️ Database Design Principles
 
-The PostgreSQL schema relies on **Entity Framework Core (Npgsql)**. It is deliberately denormalized to optimize read-heavy slate queries.
+The schema is intentionally **denormalized for read-heavy slate queries**: there are no enforced foreign-key constraints or EF navigation properties[cite: 8]. Tables are correlated through shared `PlayerId` / `TeamId` / `GameId` keys (vendor identifiers) enforced by composite **unique indexes**, with `PlayerIdMappings` reconciling BallDontLie IDs against NBA Stats IDs[cite: 8]. Every domain table carries a `Sport` discriminator (default `Nba`) for the multi-sport rollout, and hot tables use PostgreSQL's `xmin` system column for optimistic concurrency[cite: 8].
 
-* **No physical Foreign Keys:** Referential integrity is enforced at the ingestion layer via composite unique indexes (e.g., `PlayerId`, `PropType`, `GameDate`, `Sport`).
-* **Multi-Sport Discriminators:** Every domain table carries a `Sport` enum discriminator to allow seamless multi-sport coexistence.
-* **Optimistic Concurrency:** Hot tables utilize PostgreSQL's `xmin` system column as an EF Core concurrency token to safely manage race conditions between webhook updates and background polling jobs.
-* **JSONB Escape Hatches:** Select tables leverage `jsonb` columns to store sparse vendor metrics without database column explosion.
+```mermaid
+erDiagram
+    PlayerIdMappings ||--o{ PlayerPropRows : "PlayerId (logical)"
+    PlayerIdMappings ||--o{ PlayerGameLogsBase : "PlayerId (logical)"
+    PlayerIdMappings ||--o{ PlayerGameLogsAdvanced : "PlayerId (logical)"
+    PlayerIdMappings ||--o{ PlayerSeasonAverages : "PlayerId (logical)"
+    PlayerIdMappings ||--o{ RawStats : "PlayerId (logical)"
+    PlayerGameLogsBase |o--o| PlayerGameLogsAdvanced : "PlayerId + GameId + Period"
+    TeamMatchupLogs ||--o{ PlayerGameLogsBase : "TeamId + GameId (logical)"
+    TeamMatchupLogs ||--o{ TeamTrends : "TeamId + GameId (logical)"
+    TeamMatchupLogs ||--o{ TeamSeasonAverages : "TeamId + Season (logical)"
+    PlayerGameLogsBase }o--|| MatchupStats : "aggregated into (TeamId + PropCategory)"
+    PlayerPropRows }o--|| TrendingBets : "GameId (logical)"
+    Subscriptions }o--|| AccountDeletionRecords : "UserSub (Auth0 subject)"
 
-*(View the `docs/` folder for the complete Entity Relationship Diagram and OpenAPI spec.)*
+    PlayerPropRows {
+        int Id PK
+        enum Sport "discriminator, default Nba"
+        int PlayerId UK "vendor player id"
+        string PropType UK "points, rebounds, ..."
+        date GameDate UK
+        bigint GameId
+        double Line
+        int OverOdds
+        int UnderOdds
+        string HitRateL5_L10_L20 "+ season + H2H"
+        int OpponentTeamId
+        int DefenseRank
+        bool IsLocked "premium gating"
+        timestamptz LastUpdated "default now()"
+        xid RowVersion "xmin concurrency token"
+    }
+
+    PlayerGameLogsBase {
+        int Id PK
+        enum Sport UK
+        int PlayerId UK
+        bigint GameId UK
+        int Period UK "0 = full game"
+        date GameDate "indexed"
+        int Season
+        int TeamId "indexed"
+        int OpponentTeamId
+        bool IsHome
+        bool IsStarter
+        string MinutesPlayed
+        int Pts_Ast_Reb_Stl_Blk "box score columns"
+        int Fgm_Fga_Fg3m_Fg3a_Ftm_Fta
+        timestamptz LastUpdated
+    }
+
+    PlayerGameLogsAdvanced {
+        int Id PK
+        enum Sport UK
+        int PlayerId UK
+        bigint GameId UK
+        int Period UK
+        int TeamId "indexed"
+        double Pace_OffRating_DefRating
+        double UsagePct_EFgPct_TrueShootingPct
+        double Touches_Passes_Deflections "V2 tracking"
+        double MatchupMinutes_MatchupFgPct
+        timestamptz LastUpdated
+    }
+
+    TeamMatchupLogs {
+        int Id PK
+        enum Sport UK
+        int TeamId UK
+        bigint GameId UK
+        date GameDate "indexed"
+        int Season
+        int OpponentTeamId
+        int PointsInPaint_FastBreakPoints
+        double FreeThrowAttemptRate_TovPct
+        double OppEFgPct_OppORebPct "four factors"
+        timestamptz LastUpdated
+    }
+
+    MatchupStats {
+        int Id PK
+        enum Sport UK
+        int TeamId UK
+        string PropCategory UK
+        string PositionBucket UK "default ALL"
+        int Season UK
+        string WindowType UK "default Full"
+        int DefensiveRank
+        double AllowedAvg
+        int GamesCount
+        timestamptz LastUpdated
+    }
+
+    PlayerSeasonAverages {
+        int Id PK
+        enum Sport UK
+        int PlayerId UK "indexed"
+        int Season UK "indexed"
+        string Category UK
+        string Type UK
+        jsonb JsonData
+        double ShootingZoneColumns "RA, paint, midrange, corner-3, ATB-3"
+        timestamptz UpdatedAt
+    }
+
+    TeamSeasonAverages {
+        int Id PK
+        enum Sport UK
+        int TeamId UK
+        int Season UK
+        string Category UK
+        string Type UK
+        jsonb MetricsJson
+        double OppShootingZoneColumns "defense by zone"
+        timestamptz LastUpdated
+    }
+
+    TeamTrends {
+        int Id PK
+        enum Sport UK
+        int TeamId UK
+        date GameDate UK "indexed"
+        bigint GameId
+        string BetType
+        string LineValue
+        string HitRateL5_L10_L20 "+ season + H2H"
+        double Score
+        timestamptz LastUpdated
+    }
+
+    TrendingBets {
+        int Id PK
+        enum Sport
+        bigint GameId "indexed"
+        string BetType
+        string TeamOrPlayer
+        double PublicPct
+        double LineShift
+        bool IsLocked
+        xid RowVersion
+        timestamptz UpdatedAt
+    }
+
+    InjuryReports {
+        int Id PK
+        enum Sport
+        string PlayerName
+        string Team
+        string InjuryType
+        string Status
+        string EstimatedReturn
+        bool IsLocked
+        xid RowVersion
+        timestamptz UpdatedAt
+        timestamptz FirstSeenAt
+    }
+
+    PlayerIdMappings {
+        int Id PK
+        enum Sport UK
+        string PlayerName UK
+        int BdlPlayerId "BallDontLie id"
+        int NbaPlayerId "NBA Stats id"
+    }
+
+    RawStats {
+        int Id PK
+        enum Sport
+        int PlayerId
+        int TeamId
+        bigint GameId
+        int Season
+        jsonb JsonData "raw vendor payload"
+    }
+
+    WebhookDeliveries {
+        int Id PK
+        string Vendor UK
+        string EventId UK "idempotency key"
+        timestamptz ReceivedAt "default now()"
+        timestamptz ProcessedAt
+    }
+
+    Subscriptions {
+        guid Id PK
+        string UserSub "Auth0 subject, indexed"
+        string Sku
+        string Status "indexed with UserSub"
+        string Provider "stripe, apple, google"
+        string ProviderSubscriptionId
+        timestamptz StartedAt
+        timestamptz ExpiresAt
+        timestamptz LastReceiptVerifiedAt
+    }
+
+    AccountDeletionRecords {
+        int Id PK
+        string UserSub "indexed"
+        string Status "default Pending"
+        timestamptz RequestedAt "default now()"
+        timestamptz CompletedAt
+        string ErrorMessage
+    }
+
+```
 
 ---
 
 ## 🔒 Confidentiality Disclaimer
 
 This repository acts as technical documentation and a high-level architectural overview. The proprietary .NET 10 source code, PyTorch model definitions, and custom ML feature-engineering algorithms have been omitted to protect the intellectual property of the commercial platform.
-
-```
-
-```
