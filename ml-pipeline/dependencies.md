@@ -2,7 +2,7 @@
 
 The GreenSlips predictive engine **runs in-process in .NET**, not as a separate Python service. There is no inference sidecar, no FastAPI/gRPC bridge, and no cross-language call at request time — the engine is resolved through a `ISportsModelEngine` seam inside the same ASP.NET Core host that serves the API, and its scheduled fits run as Hangfire jobs in the worker role.
 
-This file replaces the `requirements.txt` that previously lived here. That file pinned the Python stack (PyTorch / XGBoost / Optuna / SHAP) used by the earlier NBA capstone pipeline, which has been retired along with the rest of the NBA vertical; it no longer describes anything in the shipping product.
+This file replaces the `requirements.txt` that previously lived here. That file pinned the Python stack (PyTorch / XGBoost / Optuna / SHAP) used by the earlier NBA capstone pipeline, which has been retired along with the rest of the NBA vertical; it no longer describes anything in the current product.
 
 ## Runtime
 

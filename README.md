@@ -1,9 +1,9 @@
 # GreenSlips: Predictive Sports Analytics Platform
 
-GreenSlips is a commercial, cross-platform sports analytics and prediction engine. It ingests real-time market and statistical data from a set of specialised vendors, runs it through an in-process predictive engine, and delivers low-latency betting insights to users through a single Avalonia client that ships to iOS, Android, desktop, and the browser.
+GreenSlips is a commercial, cross-platform sports analytics and prediction engine. It ingests real-time market and statistical data from a set of specialised vendors, runs it through an in-process predictive engine, and delivers low-latency betting insights through a single Avalonia client that targets iOS, Android, desktop, and the browser from one codebase.
 
 > **Project Status & Roadmap Note:**
-> The architecture documented in this repository reflects the **MLB prediction engine**, which is the shipping product and is at production readiness for our commercial App Store launch. The **NBA vertical from the original capstone build has been detached and archived** — no NBA ingestion or model jobs are registered, and its API surfaces resolve to dormant placeholder services. The sport-keyed seams (the `Sport` discriminator, `ISportProvider`, and the SignalR `sport:{key}` group convention) were deliberately left intact in the main tree, so reattaching NBA is a re-registration rather than a rebuild.
+> The architecture documented in this repository reflects the **MLB prediction engine** — the platform's active product line, built to production readiness ahead of a commercial App Store launch that has not yet taken place. The **NBA vertical from the original capstone build has been detached and archived** — no NBA ingestion or model jobs are registered, and its API surfaces resolve to dormant placeholder services. The sport-keyed seams (the `Sport` discriminator, `ISportProvider`, and the SignalR `sport:{key}` group convention) were deliberately left intact in the main tree, so reattaching NBA is a re-registration rather than a rebuild.
 
 ---
 
