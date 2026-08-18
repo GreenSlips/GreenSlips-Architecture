@@ -511,6 +511,6 @@ erDiagram
 
 ---
 
-## 🔒 Confidentiality Disclaimer
+## Confidentiality Disclaimer
 
 This repository acts as technical documentation and a high-level architectural overview. The proprietary .NET 10 source code, the predictive engine's model implementations, its fitted parameters and calibration curves, and the custom feature-engineering algorithms have been omitted to protect the intellectual property of the commercial platform. All configuration values, credentials, endpoints, and infrastructure identifiers shown here are redacted or generic.
