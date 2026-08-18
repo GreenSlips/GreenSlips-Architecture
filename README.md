@@ -3,11 +3,11 @@
 GreenSlips is a commercial, cross-platform sports analytics and prediction engine. It ingests real-time market and statistical data from a set of specialised vendors, runs it through an in-process predictive engine, and delivers low-latency betting insights through a single Avalonia client that targets iOS, Android, desktop, and the browser from one codebase.
 
 > **Project Status & Roadmap Note:**
-> The architecture documented in this repository reflects the **MLB prediction engine** — the platform's active product line, built to production readiness ahead of a commercial App Store launch that has not yet taken place. The **NBA vertical from the original capstone build has been detached and archived** — no NBA ingestion or model jobs are registered, and its API surfaces resolve to dormant placeholder services. The sport-keyed seams (the `Sport` discriminator, `ISportProvider`, and the SignalR `sport:{key}` group convention) were deliberately left intact in the main tree, so reattaching NBA is a re-registration rather than a rebuild.
+> The architecture documented in this repository reflects the **MLB prediction engine**: the platform's active product line, built to production readiness ahead of a commercial App Store launch that has not yet taken place. The **NBA vertical from the original capstone build has been detached and archived**: no NBA ingestion or model jobs are registered, and its API surfaces resolve to dormant placeholder services. The sport-keyed seams (the `Sport` discriminator, `ISportProvider`, and the SignalR `sport:{key}` group convention) were deliberately left intact in the main tree, so reattaching NBA is a re-registration rather than a rebuild.
 
 ---
 
-## 🎥 Walkthrough
+## Walkthrough
 
 [](https://www.youtube.com/watch?v=jQ7mQY8EFqI)
 https://www.youtube.com/watch?v=jQ7mQY8EFqI
@@ -16,7 +16,7 @@ https://www.youtube.com/watch?v=jQ7mQY8EFqI
 
 ---
 
-## ⚙️ System Architecture
+## System Architecture
 
 The Avalonia client authenticates against Auth0 (OIDC + PKCE) and talks to the ASP.NET Core 10 API over two channels: HTTPS REST for slate, player, and market data, and a persistent SignalR WebSocket to `GameHub` at `/hubs/game` for live pushes. SignalR is backed by a Redis backplane (channel prefix `greenslips-sr`), so broadcasts fan out correctly across replicas. The same container image boots in one of two roles selected at runtime by the `GREENSLIPS_ROLE` variable: the **web** role serves controllers and holds the WebSocket connections, while the **worker** role owns the Hangfire servers and the recurring ingestion and model jobs. Splitting the roles is what stops every web replica from independently running the recurring-job scheduler; worker-side jobs still publish to SignalR groups through the Redis backplane, so a broadcast raised on the worker reaches clients connected to the web replicas. Group naming is centralised in `HubGroups` — `sport:{name}` for pipeline broadcasts (see ADR-0003) and `user:{sub}` for per-user preference and entitlement sync.
 
@@ -93,7 +93,7 @@ flowchart TB
 
 ---
 
-## 🧠 AI & Machine Learning Pipeline
+## AI & Machine Learning Pipeline
 
 The predictive engine **runs in-process in C#** behind an `ISportsModelEngine` seam (ADR-0006). There is no Python service, no inference sidecar, and no cross-language call at request time; the numerical work is implemented on `MathNet.Numerics`, with `ML.NET` and `LightGBM` supplying the gradient-boosted components. Where a model genuinely needs a library with no .NET equivalent, the decision of record is to train offline and export to ONNX for in-process inference rather than to stand up a second runtime.
 
@@ -186,11 +186,11 @@ flowchart LR
 
 ---
 
-## 🗄️ Database Design Principles
+## Database Design Principles
 
-The schema is **denormalised for read-heavy slate queries** and split along a deliberate line. Inside an aggregate — a prop and its prices and hit-rate cells, a plate appearance and its pitches, a lineup and its batting-order entries — relationships are **real foreign keys with cascade delete**, because those children have no meaning without their parent and must be reclaimed with it. Across aggregate boundaries, tables are correlated through **shared vendor identifiers** (`PlayerId`, `TeamId`, `GameId`) with **no enforced constraint**, so an ingest job can write facts about a player before that player's row exists and a late-arriving vendor payload never fails on ordering. Those logical joins are held together by composite **unique indexes** — roughly fifty across the schema — which double as the natural upsert keys that make every ingestion job idempotent.
+The schema is **denormalised for read-heavy slate queries** and split along a deliberate line. Inside an aggregate, a prop and its prices and hit-rate cells, a plate appearance and its pitches, a lineup and its batting-order entries, relationships are **real foreign keys with cascade delete**, because those children have no meaning without their parent and must be reclaimed with it. Across aggregate boundaries, tables are correlated through **shared vendor identifiers** (`PlayerId`, `TeamId`, `GameId`) with **no enforced constraint**, so an ingest job can write facts about a player before that player's row exists and a late-arriving vendor payload never fails on ordering. Those logical joins are held together by composite **unique indexes**, roughly fifty across the schema, which double as the natural upsert keys that make every ingestion job idempotent.
 
-Player identity is reconciled rather than assumed: `PlayerIdMapping` and `PlayerIdMatch` crosswalk vendor player ids against the open Chadwick register by deterministic name and date-of-birth matching, and unresolved identities land in a review queue instead of being silently dropped. Every multi-sport table carries a `Sport` discriminator (its EF default is still `Nba` from the original build; MLB rows set it explicitly), and hot tables use PostgreSQL's `xmin` system column as an optimistic-concurrency token so competing pollers cannot clobber one another. Market history is retained through supersession rather than mutation — a moved line marks the prior row stale instead of overwriting it — with a global query filter making live-only the default read, and the raw odds-snapshot table is **range-partitioned by capture time** with partitions pre-created on a maintenance schedule.
+Player identity is reconciled rather than assumed: `PlayerIdMapping` and `PlayerIdMatch` crosswalk vendor player ids against the open Chadwick register by deterministic name and date-of-birth matching, and unresolved identities land in a review queue instead of being silently dropped. Every multi-sport table carries a `Sport` discriminator (its EF default is still `Nba` from the original build; MLB rows set it explicitly), and hot tables use PostgreSQL's `xmin` system column as an optimistic-concurrency token so competing pollers cannot clobber one another. Market history is retained through supersession rather than mutation, a moved line marks the prior row stale instead of overwriting it, with a global query filter making live-only the default read, and the raw odds-snapshot table is **range-partitioned by capture time** with partitions pre-created on a maintenance schedule.
 
 ```mermaid
 erDiagram
